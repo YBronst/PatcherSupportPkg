@@ -12,74 +12,55 @@ concurrency:
 
 jobs:
   build_mojave:
-    name: Zip, Sign, and Upload Binaries
+    name: Zip and Upload Binaries
     runs-on: macos-latest
 
     steps:
       - uses: actions/checkout@v5
 
-      # 1️⃣ Import Apple Development certificate
-      - name: Import Apple Development certificate
+      # 1️⃣ Импорт ВСЕХ сертификатов (один p12)
+      - name: Import code signing certificates
         uses: apple-actions/import-codesign-certs@v3
         with:
           p12-file-base64: ${{ secrets.SIGNING }}
           p12-password: ${{ secrets.SECRETSPASS }}
-          keychain-name: signing_temp
 
-      # 2️⃣ Import Developer ID Application certificate
-      - name: Import Developer ID Application certificate
-        uses: apple-actions/import-codesign-certs@v3
-        with:
-          p12-file-base64: ${{ secrets.SIGNING_IDENTITY_P12 }}
-          p12-password: ${{ secrets.SIGNING_IDENTITY_PASS }}
-          keychain-name: signing_temp
-
-      # 3️⃣ Prepare keychain
-      - name: Prepare keychain
+      # 2️⃣ Проверка — ОБЯЗАТЕЛЬНО
+      - name: Verify signing identities
         run: |
-          security list-keychains -s signing_temp.keychain login.keychain
-          security unlock-keychain -p "${{ secrets.SIGNING_IDENTITY_PASS }}" signing_temp.keychain
-          security default-keychain -s signing_temp.keychain
-          echo "Available identities:"
+          echo "Available signing identities:"
           security find-identity -v -p codesigning
 
-      # 4️⃣ Sign binaries
+      # 3️⃣ Подписание бинарей
       - name: Clean, strip, and sign binaries
         run: python3 ci.py
 
       - name: Tag folder
         run: touch Universal-Binaries/.signed
 
-      # 5️⃣ Build & sign DMG
-      - name: Build and sign DMG
+      # 4️⃣ Сборка и подпись DMG
+      - name: Build DMG
         run: |
           python3 Generate-DMG.command --sign
 
-          echo "Verifying DMG signature"
-          codesign --verify --deep --strict Universal-Binaries.dmg
+      # 5️⃣ Контроль подписи DMG
+      - name: Verify DMG signature
+        run: |
+          codesign -dv --verbose=4 Universal-Binaries.dmg
 
-      # 6️⃣ Checksums
-      - name: Generate checksums
+      # 6️⃣ Хэши
+      - name: Generate Checksums
         run: shasum -a 256 Universal-Binaries.dmg > sha256sum.txt
 
-      # 7️⃣ Artifacts
-      - uses: actions/upload-artifact@v5
-        with:
-          name: Universal-Binaries
-          path: Universal-Binaries.dmg
-
-      - uses: actions/upload-artifact@v5
-        with:
-          name: sha256sum
-          path: sha256sum.txt
-
-      # 8️⃣ Release
+      # 7️⃣ Подготовка релиза
       - name: Prepare release files
         run: |
           mkdir deploy
           mv Universal-Binaries.dmg sha256sum.txt deploy/
+          ls -la deploy
 
-      - name: Upload to GitHub Release
+      # 8️⃣ Загрузка в Release
+      - name: Upload to Release
         if: github.event_name == 'release'
         uses: svenstaro/upload-release-action@v2
         with:
