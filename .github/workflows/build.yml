@@ -37,10 +37,29 @@ jobs:
       - name: Tag folder
         run: touch Universal-Binaries/.signed
 
-      - name: Build DMG
+      # 🔹 Исправленный шаг DMG
+      - name: Build and Sign DMG
         run: |
-          # Попытка собрать DMG и подписать
-          python3 Generate-DMG.command --sign || echo "DMG signing failed, continuing..."
+          # Разблокируем keychain
+          security unlock-keychain -p ${{ secrets.SECRETSPASS }} signing_temp.keychain
+          security default-keychain -s signing_temp.keychain
+
+          # Узнаём identity для подписи DMG
+          echo "Available signing identities:"
+          security find-identity -v -p codesigning
+
+          # Явное указание identity для DMG
+          DMG_IDENTITY="Developer ID Application: Your Name (TEAMID)"
+
+          # Генерация DMG
+          python3 Generate-DMG.command --sign "$DMG_IDENTITY"
+
+          # Проверка подписи
+          if [ -f Universal-Binaries.dmg ]; then
+            codesign -dv --verbose=4 "Universal-Binaries.dmg"
+          else
+            echo "DMG не сгенерирован"
+          fi
 
       - name: Generate Checksums
         run: shasum -a 256 Universal-Binaries.dmg > sha256sum.txt || echo "No DMG generated"
@@ -70,6 +89,3 @@ jobs:
           file: deploy/*
           file_glob: true
           token: ${{ secrets.PAT_TOKEN }}
-
-
-    
