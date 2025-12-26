@@ -79,4 +79,4 @@ jobs:
         with:
           file: deploy/*
           file_glob: true
-          token: ${{ secrets.PAT_TOKEN }}
+          repo_token: ${{ secrets.PAT_TOKEN }}
