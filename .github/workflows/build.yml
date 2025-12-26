@@ -17,9 +17,9 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: apple-actions/import-codesign-certs@v3
-        with:
-          p12-file-base64: ${{ secrets.SIGNING }}
-          p12-password: ${{ secrets.SECRETSPASS }}
+    with:
+    p12-file-base64: ${{ secrets.SIGNING }}
+    p12-password: ${{ secrets.SECRETSPASS }}
       - name: Clean, strip, and sign binaries
         run: python3 ci.py
       - name: Tag folder
