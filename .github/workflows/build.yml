@@ -39,7 +39,7 @@ jobs:
 
       - name: Build DMG
         run: |
-          # Попытка собрать DMG и подписать
+
           python3 Generate-DMG.command --sign || echo "DMG signing failed, continuing..."
 
       - name: Generate Checksums
