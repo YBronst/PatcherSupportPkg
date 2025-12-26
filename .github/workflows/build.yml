@@ -18,71 +18,53 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      # Импорт сертификатов
       - name: Import code signing certificates
         uses: apple-actions/import-codesign-certs@v3
         with:
           p12-file-base64: ${{ secrets.SIGNING }}
           p12-password: ${{ secrets.SECRETSPASS }}
 
-      # Создание временного keychain
       - name: Prepare keychain
         run: |
-          security create-keychain -p ${{ secrets.SECRETSPASS }} signing_temp.keychain
-          security import ./cert.p12 -k signing_temp.keychain -P ${{ secrets.SECRETSPASS }} -T /usr/bin/codesign
           security list-keychains -s signing_temp.keychain login.keychain
           security unlock-keychain -p ${{ secrets.SECRETSPASS }} signing_temp.keychain
           security default-keychain -s signing_temp.keychain
           security find-identity -v -p codesigning
 
-      # Чистка, стрип и подпись бинарей
       - name: Clean, strip, and sign binaries
         run: python3 ci.py
 
-      # Пометка подписи
       - name: Tag folder
         run: touch Universal-Binaries/.signed
 
-      # Генерация и подпись DMG
       - name: Build DMG
         run: |
+          # Попытка собрать DMG и подписать
           python3 Generate-DMG.command --sign || echo "DMG signing failed, continuing..."
 
-      # Генерация контрольной суммы
       - name: Generate Checksums
-        run: |
-          if [ -f Universal-Binaries.dmg ]; then
-            shasum -a 256 Universal-Binaries.dmg > sha256sum.txt
-          else
-            echo "No DMG generated"
-          fi
+        run: shasum -a 256 Universal-Binaries.dmg > sha256sum.txt || echo "No DMG generated"
 
-      # Загрузка артефактов
       - name: Upload Universal Binaries to Artifacts
-        if: success() && always()
         uses: actions/upload-artifact@v5
         with:
           name: Universal Binaries
           path: Universal-Binaries.dmg
 
       - name: Upload Checksums to Artifacts
-        if: success() && always()
         uses: actions/upload-artifact@v5
         with:
           name: sha256sum.txt
           path: sha256sum.txt
 
-      # Подготовка файлов для релиза
       - name: Prepare release files
         run: |
-          mkdir -p deploy
+          mkdir deploy
           mv *.dmg sha256sum.txt deploy/ || echo "No files to move"
 
-      # Загрузка на релиз с использованием PAT
       - name: Upload to Release
         if: github.event_name == 'release'
-        uses: svenstaro/upload-release-action@v2
+        uses: svenstaro/upload-release-action@1beeb572c19a9242f4361f4cee78f8e0d9aec5df
         with:
           file: deploy/*
           file_glob: true
-          token: ${{ secrets.PAT_TOKEN }}
