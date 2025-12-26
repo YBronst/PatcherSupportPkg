@@ -61,12 +61,15 @@ jobs:
         run: |
           mkdir deploy
           mv *.dmg sha256sum.txt deploy/ || echo "No files to move"
+          ls -la deploy
 
       - name: Upload to Release
-  if: github.event_name == 'release'
-  uses: svenstaro/upload-release-action@v2
-  with:
-    file: deploy/*
-    file_glob: true
-    token: ${{ secrets.PAT_TOKEN }}
+        if: github.event_name == 'release'
+        uses: svenstaro/upload-release-action@v2
+        with:
+          file: deploy/*
+          file_glob: true
+          token: ${{ secrets.PAT_TOKEN }}
+
+
     
