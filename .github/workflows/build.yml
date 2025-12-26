@@ -30,10 +30,17 @@ jobs:
         run: touch Universal-Binaries/.signed
 
       - name: Build DMG
-        run: python3 Generate-DMG.command --sign
+        run: |
+         
+          security list-keychains -s signing_temp.keychain login.keychain
+          security unlock-keychain -p ${{ secrets.SECRETSPASS }} signing_temp.keychain
+        
+          security find-identity -v -p codesigning
+         
+          python3 Generate-DMG.command --sign
         env:
           SIGNING: "Apple Development: ybronst@icloud.com (Q552RWTDRT)"
-      
+
       - name: Generate Checksums
         run: shasum -a 256 Universal-Binaries.dmg > sha256sum.txt
 
