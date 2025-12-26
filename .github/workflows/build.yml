@@ -31,7 +31,9 @@ jobs:
 
       - name: Build DMG
         run: python3 Generate-DMG.command --sign
-
+        env:
+          SIGNING: "Apple Development: ybronst@icloud.com (Q552RWTDRT)"
+      
       - name: Generate Checksums
         run: shasum -a 256 Universal-Binaries.dmg > sha256sum.txt
 
