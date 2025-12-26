@@ -74,7 +74,7 @@ jobs:
 
       # 11. Upload to Release
       - name: Upload to Release
-        if: github.event_name == 'release'
+        # if: github.event_name == 'release'
         uses: svenstaro/upload-release-action@v2
         with:
           file: deploy/*
