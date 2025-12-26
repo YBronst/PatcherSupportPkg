@@ -16,97 +16,70 @@ jobs:
     runs-on: macos-latest
 
     steps:
-      # 1️⃣ Checkout repository
       - uses: actions/checkout@v5
 
-      # 2️⃣ Import Apple Development certificate for binaries
+      # 1️⃣ Import Apple Development certificate
       - name: Import Apple Development certificate
         uses: apple-actions/import-codesign-certs@v3
         with:
           p12-file-base64: ${{ secrets.SIGNING }}
           p12-password: ${{ secrets.SECRETSPASS }}
+          keychain-name: signing_temp
 
-      # 3️⃣ Import Developer ID Application certificate for DMG
+      # 2️⃣ Import Developer ID Application certificate
       - name: Import Developer ID Application certificate
         uses: apple-actions/import-codesign-certs@v3
         with:
           p12-file-base64: ${{ secrets.SIGNING_IDENTITY_P12 }}
           p12-password: ${{ secrets.SIGNING_IDENTITY_PASS }}
+          keychain-name: signing_temp
 
-      # 4️⃣ Prepare keychain
+      # 3️⃣ Prepare keychain
       - name: Prepare keychain
         run: |
           security list-keychains -s signing_temp.keychain login.keychain
-          security unlock-keychain -p ${{ secrets.SIGNING_IDENTITY_PASS }} signing_temp.keychain
+          security unlock-keychain -p "${{ secrets.SIGNING_IDENTITY_PASS }}" signing_temp.keychain
           security default-keychain -s signing_temp.keychain
+          echo "Available identities:"
+          security find-identity -v -p codesigning
 
-      # 5️⃣ Verify Developer ID Application certificate
-      - name: Verify Developer ID Application certificate
-        run: |
-          echo "Проверяем импортированные identity..."
-          security find-identity -v -p codesigning signing_temp.keychain
-
-          DEV_ID_COUNT=$(security find-identity -v -p codesigning signing_temp.keychain | grep "Developer ID Application" | wc -l)
-          if [ "$DEV_ID_COUNT" -eq 0 ]; then
-            echo "❌ Developer ID Application не найден в keychain!"
-            exit 1
-          else
-            echo "✅ Developer ID Application найден и готов к подписи DMG"
-          fi
-
-      # 6️⃣ Clean, strip, and sign binaries
+      # 4️⃣ Sign binaries
       - name: Clean, strip, and sign binaries
         run: python3 ci.py
 
-      # 7️⃣ Tag folder as signed
       - name: Tag folder
         run: touch Universal-Binaries/.signed
 
-      # 8️⃣ Build and sign DMG
-      - name: Build and Sign DMG
+      # 5️⃣ Build & sign DMG
+      - name: Build and sign DMG
         run: |
-          security unlock-keychain -p ${{ secrets.SIGNING_IDENTITY_PASS }} signing_temp.keychain
-          security default-keychain -s signing_temp.keychain
+          python3 Generate-DMG.command --sign
 
-          echo "Available signing identities:"
-          security find-identity -v -p codesigning
+          echo "Verifying DMG signature"
+          codesign --verify --deep --strict Universal-Binaries.dmg
 
-          python3 Generate-DMG.command --sign || echo "DMG signing failed, continuing..."
+      # 6️⃣ Checksums
+      - name: Generate checksums
+        run: shasum -a 256 Universal-Binaries.dmg > sha256sum.txt
 
-          if [ -f Universal-Binaries.dmg ]; then
-            codesign --verify --deep --strict Universal-Binaries.dmg
-            echo "DMG подписан ✅"
-          else
-            echo "DMG отсутствует ❌"
-            exit 1
-          fi
-
-      # 9️⃣ Generate checksum
-      - name: Generate Checksums
-        run: shasum -a 256 Universal-Binaries.dmg > sha256sum.txt || echo "No DMG generated"
-
-      # 🔟 Upload artifacts to Actions
-      - name: Upload Universal Binaries to Artifacts
-        uses: actions/upload-artifact@v5
+      # 7️⃣ Artifacts
+      - uses: actions/upload-artifact@v5
         with:
-          name: Universal Binaries
+          name: Universal-Binaries
           path: Universal-Binaries.dmg
 
-      - name: Upload Checksums to Artifacts
-        uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v5
         with:
-          name: sha256sum.txt
+          name: sha256sum
           path: sha256sum.txt
 
-      # 1️⃣1️⃣ Prepare files for release
+      # 8️⃣ Release
       - name: Prepare release files
         run: |
-          mkdir -p deploy
-          mv *.dmg sha256sum.txt deploy/ || echo "No files to move"
-          ls -la deploy
+          mkdir deploy
+          mv Universal-Binaries.dmg sha256sum.txt deploy/
 
-      # 1️⃣2️⃣ Upload to GitHub Release
-      - name: Upload to Release
+      - name: Upload to GitHub Release
         if: github.event_name == 'release'
         uses: svenstaro/upload-release-action@v2
         with:
