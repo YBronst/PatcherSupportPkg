@@ -69,7 +69,8 @@ jobs:
       - name: Prepare release files
         run: |
           mkdir -p deploy
-          mv *.dmg sha256sum.txt deploy/ || echo "No files to move"
+          mv *.dmg deploy/ || echo "No files to move
+          mv sha256sum.txt deploy/ || echo "No files to move
           ls -la deploy
 
       # 11. Upload to Release
