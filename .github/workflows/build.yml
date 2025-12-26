@@ -39,31 +39,40 @@ jobs:
           security list-keychains -s signing_temp.keychain login.keychain
           security unlock-keychain -p ${{ secrets.SIGNING_IDENTITY_PASS }} signing_temp.keychain
           security default-keychain -s signing_temp.keychain
-          security find-identity -v -p codesigning
 
-      # 5️⃣ Clean, strip, and sign binaries
+      # 5️⃣ Verify Developer ID Application certificate
+      - name: Verify Developer ID Application certificate
+        run: |
+          echo "Проверяем импортированные identity..."
+          security find-identity -v -p codesigning signing_temp.keychain
+
+          DEV_ID_COUNT=$(security find-identity -v -p codesigning signing_temp.keychain | grep "Developer ID Application" | wc -l)
+          if [ "$DEV_ID_COUNT" -eq 0 ]; then
+            echo "❌ Developer ID Application не найден в keychain!"
+            exit 1
+          else
+            echo "✅ Developer ID Application найден и готов к подписи DMG"
+          fi
+
+      # 6️⃣ Clean, strip, and sign binaries
       - name: Clean, strip, and sign binaries
         run: python3 ci.py
 
-      # 6️⃣ Tag folder as signed
+      # 7️⃣ Tag folder as signed
       - name: Tag folder
         run: touch Universal-Binaries/.signed
 
-      # 7️⃣ Build and sign DMG
+      # 8️⃣ Build and sign DMG
       - name: Build and Sign DMG
         run: |
-          # Разблокируем keychain
           security unlock-keychain -p ${{ secrets.SIGNING_IDENTITY_PASS }} signing_temp.keychain
           security default-keychain -s signing_temp.keychain
 
-          # Список доступных identity для проверки
           echo "Available signing identities:"
           security find-identity -v -p codesigning
 
-          # Генерация DMG с подписью
           python3 Generate-DMG.command --sign || echo "DMG signing failed, continuing..."
 
-          # Проверка подписи DMG
           if [ -f Universal-Binaries.dmg ]; then
             codesign --verify --deep --strict Universal-Binaries.dmg
             echo "DMG подписан ✅"
@@ -72,11 +81,11 @@ jobs:
             exit 1
           fi
 
-      # 8️⃣ Generate checksum
+      # 9️⃣ Generate checksum
       - name: Generate Checksums
         run: shasum -a 256 Universal-Binaries.dmg > sha256sum.txt || echo "No DMG generated"
 
-      # 9️⃣ Upload artifacts to Actions
+      # 🔟 Upload artifacts to Actions
       - name: Upload Universal Binaries to Artifacts
         uses: actions/upload-artifact@v5
         with:
@@ -89,14 +98,14 @@ jobs:
           name: sha256sum.txt
           path: sha256sum.txt
 
-      # 🔟 Prepare files for release
+      # 1️⃣1️⃣ Prepare files for release
       - name: Prepare release files
         run: |
           mkdir -p deploy
           mv *.dmg sha256sum.txt deploy/ || echo "No files to move"
           ls -la deploy
 
-      # 1️⃣1️⃣ Upload to GitHub Release (только при событии release)
+      # 1️⃣2️⃣ Upload to GitHub Release
       - name: Upload to Release
         if: github.event_name == 'release'
         uses: svenstaro/upload-release-action@v2
