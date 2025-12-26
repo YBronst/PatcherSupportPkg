@@ -31,12 +31,15 @@ jobs:
 
       - name: Build DMG
         run: |
-         
+          # Добавляем временный keychain в поиск и делаем его default
           security list-keychains -s signing_temp.keychain login.keychain
           security unlock-keychain -p ${{ secrets.SECRETSPASS }} signing_temp.keychain
-        
+          security default-keychain -s signing_temp.keychain
+
+          # Проверяем наличие сертификатов
           security find-identity -v -p codesigning
-         
+
+          # Запускаем сборку и подпись DMG
           python3 Generate-DMG.command --sign
         env:
           SIGNING: "Apple Development: ybronst@icloud.com (Q552RWTDRT)"
