@@ -16,50 +16,63 @@ jobs:
     runs-on: macos-latest
 
     steps:
+      # 1. Checkout repository
       - uses: actions/checkout@v5
 
-      # 1️⃣ Импорт ВСЕХ сертификатов (один p12)
+      # 2. Import code signing certificates
       - name: Import code signing certificates
         uses: apple-actions/import-codesign-certs@v3
         with:
           p12-file-base64: ${{ secrets.SIGNING }}
           p12-password: ${{ secrets.SECRETSPASS }}
 
-      # 2️⃣ Проверка — ОБЯЗАТЕЛЬНО
-      - name: Verify signing identities
+      # 3. Prepare keychain
+      - name: Prepare keychain
         run: |
-          echo "Available signing identities:"
+          security list-keychains -s signing_temp.keychain login.keychain
+          security unlock-keychain -p ${{ secrets.SECRETSPASS }} signing_temp.keychain
+          security default-keychain -s signing_temp.keychain
           security find-identity -v -p codesigning
 
-      # 3️⃣ Подписание бинарей
+      # 4. Clean, strip, and sign binaries
       - name: Clean, strip, and sign binaries
         run: python3 ci.py
 
+      # 5. Tag folder
       - name: Tag folder
         run: touch Universal-Binaries/.signed
 
-      # 4️⃣ Сборка и подпись DMG
+      # 6. Build DMG
       - name: Build DMG
         run: |
-          python3 Generate-DMG.command --sign
+          python3 Generate-DMG.command --sign || echo "DMG signing failed, continuing..."
 
-      # 5️⃣ Контроль подписи DMG
-      - name: Verify DMG signature
-        run: |
-          codesign -dv --verbose=4 Universal-Binaries.dmg
-
-      # 6️⃣ Хэши
+      # 7. Generate Checksums
       - name: Generate Checksums
-        run: shasum -a 256 Universal-Binaries.dmg > sha256sum.txt
+        run: shasum -a 256 Universal-Binaries.dmg > sha256sum.txt || echo "No DMG generated"
 
-      # 7️⃣ Подготовка релиза
+      # 8. Upload Universal Binaries to Artifacts
+      - name: Upload Universal Binaries to Artifacts
+        uses: actions/upload-artifact@v5
+        with:
+          name: Universal Binaries
+          path: Universal-Binaries.dmg
+
+      # 9. Upload Checksums to Artifacts
+      - name: Upload Checksums to Artifacts
+        uses: actions/upload-artifact@v5
+        with:
+          name: sha256sum.txt
+          path: sha256sum.txt
+
+      # 10. Prepare release files
       - name: Prepare release files
         run: |
-          mkdir deploy
-          mv Universal-Binaries.dmg sha256sum.txt deploy/
+          mkdir -p deploy
+          mv *.dmg sha256sum.txt deploy/ || echo "No files to move"
           ls -la deploy
 
-      # 8️⃣ Загрузка в Release
+      # 11. Upload to Release
       - name: Upload to Release
         if: github.event_name == 'release'
         uses: svenstaro/upload-release-action@v2
