@@ -16,6 +16,8 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v6
+      - uses: actions/checkout@v5
+      - run: ls -la ./signing.p12
       - name: Import code signing certificates
         uses: apple-actions/import-codesign-certs@v3
         with:
