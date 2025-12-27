@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  push:
+
+concurrency:
+  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+
+jobs:
+  build-macos:
+    name: Build DMG and Upload
+    runs-on: macos-latest
+
+    steps:
+      # 1️⃣ Клонируем репозиторий
+      - uses: actions/checkout@v6
+
+      # 2️⃣ Проверяем, что секрет с сертификатом передан
+      - name: Check IDENTITY_P12 secret
+        run: |
+          if [ -z "${{ secrets.IDENTITY_P12 }}" ]; then
+            echo "ERROR: SECRET IDENTITY_P12 IS EMPTY!"
+            exit 1
+          else
+            echo "SECRET IDENTITY_P12 is present"
+          fi
+
+      # 3️⃣ Импортируем сертификат в временный keychain
+      - name: Import code signing certificates
+        uses: apple-actions/import-codesign-certs@v3
+        with:
+          p12-file-base64: ${{ secrets.IDENTITY_P12 }}
+          p12-password: ${{ secrets.IDENTITY_P12_PASSWORD }}
+          keychain: signing_temp
+          create-keychain: true
+
+      # 4️⃣ Подготовка бинарников
+      - name: Clean, strip, and sign binaries
+        run: python3 ci.py
+
+      # 5️⃣ Помечаем папку как готовую
+      - name: Tag folder
+        run: touch Universal-Binaries/.signed
+
+      # 6️⃣ Собираем DMG без подписи
+      - name: Build DMG
+        run: python3 Generate-DMG.command --sign
+
+      # 7️⃣ Генерируем sha256 суммы
+      - name: Generate Checksums
+        run: shasum -a 256 Universal-Binaries.dmg > sha256sum.txt
+
+      # 8️⃣ Загружаем DMG в артефакты
+      - name: Upload DMG to Artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          name: Universal Binaries
+          path: Universal-Binaries.dmg
+
+      # 9️⃣ Загружаем sha256sum.txt в артефакты
+      - name: Upload Checksums to Artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          name: sha256sum.txt
+          path: sha256sum.txt
+
+      # 🔟 Подготовка папки deploy для релиза
+      - run: |
+          mkdir deploy
+          mv Universal-Binaries.dmg sha256sum.txt deploy/
