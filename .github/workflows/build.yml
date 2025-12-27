@@ -11,9 +11,9 @@ concurrency:
     group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
 
 jobs:
-  build_Sequoia:
+  build-macos:
     name: Zip and Upload Binaries
-    runs-on: macos-15
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v5
       - name: Import code signing certificates
