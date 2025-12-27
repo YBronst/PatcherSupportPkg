@@ -1,10 +1,7 @@
-name: CI - Upload Binaries
+name: CI
 
 on:
   push:
-  workflow_dispatch:
-  release:
-    types: [published]
 
 concurrency:
   cancel-in-progress: true
@@ -48,7 +45,7 @@ jobs:
 
       # 6️⃣ Собираем DMG без подписи
       - name: Build DMG
-        run: python3 Generate-DMG.command
+        run: python3 Generate-DMG.command --sign
 
       # 7️⃣ Генерируем sha256 суммы
       - name: Generate Checksums
@@ -72,12 +69,3 @@ jobs:
       - run: |
           mkdir deploy
           mv Universal-Binaries.dmg sha256sum.txt deploy/
-
-      # 11️⃣ Загрузка в GitHub Release (только при событии release)
-      - name: Upload to Release
-        if: github.event_name == 'release'
-        uses: svenstaro/upload-release-action@v2
-        with:
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: deploy/*
-          file_glob: true
