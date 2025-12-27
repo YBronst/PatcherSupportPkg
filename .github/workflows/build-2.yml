@@ -1,0 +1,82 @@
+name: CI - Upload Binaries
+
+on:
+  push:
+  workflow_dispatch:
+  release:
+    types: [published]
+
+concurrency:
+  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+
+jobs:
+  build_mojave:
+    name: Zip and Upload Binaries
+    runs-on: macos-latest
+
+    steps:
+      # 1. Checkout repository
+      - uses: actions/checkout@v5
+
+      # 2. Import code signing certificates
+      - name: Import code signing certificates
+        uses: apple-actions/import-codesign-certs@v3
+        with:
+          p12-file-base64: ${{ secrets.SIGNING }}
+          p12-password: ${{ secrets.SECRETSPASS }}
+
+      # 3. Prepare keychain
+      - name: Prepare keychain
+        run: |
+          security list-keychains -s signing_temp.keychain login.keychain
+          security unlock-keychain -p ${{ secrets.SECRETSPASS }} signing_temp.keychain
+          security default-keychain -s signing_temp.keychain
+          security find-identity -v -p codesigning
+
+      # 4. Clean, strip, and sign binaries
+      - name: Clean, strip, and sign binaries
+        run: python3 ci.py
+
+      # 5. Tag folder
+      - name: Tag folder
+        run: touch Universal-Binaries/.signed
+
+      # 6. Build DMG
+      - name: Build DMG
+        run: |
+          python3 Generate-DMG.command --sign || echo "DMG signing failed, continuing..."
+
+      # 7. Generate Checksums
+      - name: Generate Checksums
+        run: shasum -a 256 Universal-Binaries.dmg > sha256sum.txt || echo "No DMG generated"
+
+      # 8. Upload Universal Binaries to Artifacts
+      - name: Upload Universal Binaries to Artifacts
+        uses: actions/upload-artifact@v5
+        with:
+          name: Universal Binaries
+          path: Universal-Binaries.dmg
+
+      # 9. Upload Checksums to Artifacts
+      - name: Upload Checksums to Artifacts
+        uses: actions/upload-artifact@v5
+        with:
+          name: sha256sum.txt
+          path: sha256sum.txt
+
+      # 10. Prepare release files
+      - name: Prepare release files
+        run: |
+          mkdir -p deploy
+          mv *.dmg sha256sum.txt deploy/
+          ls -la deploy
+
+      # 11. Upload to Release
+      - name: Upload binaries to release
+        if: github.event_name == 'release'
+        uses: svenstaro/upload-release-action@1beeb572c19a9242f4361f4cee78f8e0d9aec5df
+        with:
+          file: deploy/*
+          file_glob: true
+          repo_token: ${{ secrets.PAT_TOKEN }}
