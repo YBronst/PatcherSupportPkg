@@ -44,7 +44,7 @@ jobs:
           mv *.dmg sha256sum.txt deploy/
       - name: Upload to Release
         if: github.event_name == 'release'
-        uses: svenstaro/upload-release-action@1.9.6
+        uses: svenstaro/upload-release-action@v2
         with:
           file: deploy/*
           file_glob: true
