@@ -19,8 +19,8 @@ jobs:
       - name: Import code signing certificates
         uses: apple-actions/import-codesign-certs@v3
         with:
-          IDENTITY_P12: ${{ secrets.IDENTITY_P12 }}
-          IDENTITY_P12_PASSWORD: ${{ secrets.IDENTITY_P12_PASSWORD }}
+          p12-file-base64: ${{ secrets.IDENTITY_P12 }}
+          p12-password: ${{ secrets.IDENTITY_P12_PASSWORD }}
       - name: Clean, strip, and sign binaries
         run: python3 ci.py
       - name: Tag folder
