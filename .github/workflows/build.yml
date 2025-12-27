@@ -7,47 +7,67 @@ on:
     types: [published]
 
 concurrency:
-    cancel-in-progress: true
-    group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
 
 jobs:
   build-macos:
-    name: Zip and Upload Binaries
+    name: Build DMG and Upload
     runs-on: macos-latest
+
     steps:
+      # 1️⃣ Клонируем репозиторий
       - uses: actions/checkout@v6
-      - uses: actions/checkout@v5
-      - run: ls -la ./signing.p12
+
+      # 2️⃣ Импортируем сертификат из base64
       - name: Import code signing certificates
         uses: apple-actions/import-codesign-certs@v3
         with:
           p12-file-base64: ${{ secrets.IDENTITY_P12 }}
           p12-password: ${{ secrets.IDENTITY_P12_PASSWORD }}
+          keychain: signing_temp
+          create-keychain: true
+
+      # 3️⃣ Подготовка бинарников
       - name: Clean, strip, and sign binaries
         run: python3 ci.py
+
+      # 4️⃣ Помечаем папку как готовую
       - name: Tag folder
         run: touch Universal-Binaries/.signed
+
+      # 5️⃣ Собираем DMG без подписи
       - name: Build DMG
-        # run: python3 Generate-DMG.command --sign
         run: python3 Generate-DMG.command
+
+      # 6️⃣ Генерируем sha256 суммы
       - name: Generate Checksums
         run: shasum -a 256 Universal-Binaries.dmg > sha256sum.txt
-      - name: Upload Universal Binaries to Artifacts
+
+      # 7️⃣ Загружаем DMG в артефакты
+      - name: Upload DMG to Artifacts
         uses: actions/upload-artifact@v6
         with:
           name: Universal Binaries
           path: Universal-Binaries.dmg
+
+      # 8️⃣ Загружаем sha256sum.txt в артефакты
       - name: Upload Checksums to Artifacts
         uses: actions/upload-artifact@v6
         with:
           name: sha256sum.txt
           path: sha256sum.txt
+
+      # 9️⃣ Подготовка папки deploy для релиза
       - run: |
           mkdir deploy
-          mv *.dmg sha256sum.txt deploy/
+          mv Universal-Binaries.dmg sha256sum.txt deploy/
+
+      # 🔟 Загрузка в GitHub Release (только при событии release)
       - name: Upload to Release
         if: github.event_name == 'release'
         uses: svenstaro/upload-release-action@v2
         with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: deploy/*
           file_glob: true
